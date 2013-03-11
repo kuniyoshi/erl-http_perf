@@ -16,6 +16,9 @@ loop() ->
         {get, URL, Count} ->
             spawn(?MODULE, get, [URL, Count]),
             loop();
+        {took, Url, MicroSeconds, StatusCode, StatusMessage} ->
+            io:format("~p[s] - ~p ~p GET ~p~n", [MicroSeconds, StatusCode, StatusMessage, Url]),
+            loop();
         stop ->
             ok
     end.
@@ -26,13 +29,11 @@ load(Url, RequestCount, ProcessCount) ->
 get(_Url, 0) ->
     done;
 get(Url, Count) ->
-    Start = now(),
-    httpc:request(get,
-                  {Url, []},
-                  [{timeout, ?WAIT_MS}],
-                  [{sync, false}, {receiver, fun ({Id, {Status, _Headers, _Body}}) ->
-                                                     End = now(),
-                                                     Took = element(2, End) - element(2, Start) + (element(3, End) - element(3, Start)) / 1000000,
-                                                     io:format("ok - ~p ~p # ~p~n", [Id, Status, Took])
-                                             end}]),
+    {MicroSeconds, {ok, {{_Version, StatusCode, StatusMessage}, _Head, _Body}}}
+        = timer:tc(httpc, request, [get,
+                                    {Url, []},
+                                    [{timeout, ?WAIT_MS}],
+                                    []]),
+%    io:format("~p ~p ~p ~p~n", [MicroSeconds, Url, StatusCode, StatusMessage]),
+    ?MODULE ! {took, Url, MicroSeconds, StatusCode, StatusMessage},
     get(Url, Count - 1).
